@@ -28,6 +28,13 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
+/* 我们自己的四层代码：启动序列要用到的头文件 */
+#include "app_cfg.h"
+#include "app_ctx.h"
+#include "app_tasks.h"
+#include "cm_log.h"
+#include "if_store.h"
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -98,6 +105,47 @@ int main(void)
   MX_USART1_UART_Init();
   MX_USART3_UART_Init();
   /* USER CODE BEGIN 2 */
+
+  /* 启动序列，顺序不能换（详见 docs/M1-CubeMX配置清单.md 第 8 节）：
+   *   ① 读配置 → ② 建上下文 → ③ 接日志 → ④ 建任务 → ⑤ 打印复位原因
+   * 注意 ①② 都在调度器启动之前，所以它们内部不许调用任何 FreeRTOS API。 */
+  {
+    static const moxa_cfg_t boot_defaults = {
+        .th_max_c   = APP_DEF_TH_C,
+        .duration_s = APP_DEF_DUR_S,
+    };
+    moxa_cfg_t boot_cfg;
+    cm_err_t   load_result;
+
+    /* ① 读配置：失败就用默认值（函数内部已经处理好），把结果留到日志接上之后再报 */
+    load_result = if_store_load(&boot_defaults, &boot_cfg);
+
+    /* ② 建队列 / 事件组 / 互斥量，并用读到的配置初始化共享状态 */
+    (void)app_ctx_init(&boot_cfg);
+
+    /* ③ 把日志接到 USART1（从这里往后的日志才真的打得出来） */
+    app_log_init();
+
+    if (load_result != CM_OK) {
+        cm_log_printf("boot: config load failed (err=%d), using defaults", (int)load_result);
+    } else {
+        cm_log_printf("boot: config th=%u C dur=%u s",
+                      (unsigned)boot_cfg.th_max_c, (unsigned)boot_cfg.duration_s);
+    }
+
+    /* ④ 建 6 个任务（优先级与栈深全在 app_cfg.h 里） */
+    (void)app_tasks_create();
+
+    /* ⑤ 复位原因：看门狗复位要能一眼认出来（IWDG 到 M5 才真正启用） */
+    if (__HAL_RCC_GET_FLAG(RCC_FLAG_IWDGRST) != 0U) {
+        cm_log_printf("boot: reset source = IWDG (watchdog)");
+    } else if (__HAL_RCC_GET_FLAG(RCC_FLAG_PINRST) != 0U) {
+        cm_log_printf("boot: reset source = NRST pin");
+    } else {
+        cm_log_printf("boot: reset source = POR/PDR or software");
+    }
+    __HAL_RCC_CLEAR_RESET_FLAGS();
+  }
 
   /* USER CODE END 2 */
 

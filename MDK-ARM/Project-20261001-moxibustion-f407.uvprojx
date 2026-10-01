@@ -184,7 +184,7 @@
             <hadIRAM2>1</hadIRAM2>
             <hadIROM2>0</hadIROM2>
             <StupSel>8</StupSel>
-            <useUlib>0</useUlib>
+            <useUlib>1</useUlib>
             <EndSel>0</EndSel>
             <uLtcg>0</uLtcg>
             <nSecure>0</nSecure>
@@ -334,7 +334,7 @@
               <MiscControls />
               <Define>USE_HAL_DRIVER,STM32F407xx</Define>
               <Undefine />
-              <IncludePath>../Core/Inc;../Drivers/STM32F4xx_HAL_Driver/Inc;../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy;../Middlewares/Third_Party/FreeRTOS/Source/include;../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS;../Middlewares/Third_Party/FreeRTOS/Source/portable/RVDS/ARM_CM4F;../Drivers/CMSIS/Device/ST/STM32F4xx/Include;../Drivers/CMSIS/Include</IncludePath>
+              <IncludePath>../Core/Inc;../Drivers/STM32F4xx_HAL_Driver/Inc;../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy;../Middlewares/Third_Party/FreeRTOS/Source/include;../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS;../Middlewares/Third_Party/FreeRTOS/Source/portable/RVDS/ARM_CM4F;../Drivers/CMSIS/Device/ST/STM32F4xx/Include;../Drivers/CMSIS/Include;../Application/Inc;../Interface/Inc;../Driver/Inc;../Common/Inc</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -352,7 +352,7 @@
               <MiscControls />
               <Define />
               <Undefine />
-              <IncludePath>../Core/Inc;../Drivers/STM32F4xx_HAL_Driver/Inc;../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy;../Middlewares/Third_Party/FreeRTOS/Source/include;../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS;../Middlewares/Third_Party/FreeRTOS/Source/portable/RVDS/ARM_CM4F;../Drivers/CMSIS/Device/ST/STM32F4xx/Include;../Drivers/CMSIS/Include</IncludePath>
+              <IncludePath>../Core/Inc;../Drivers/STM32F4xx_HAL_Driver/Inc;../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy;../Middlewares/Third_Party/FreeRTOS/Source/include;../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS;../Middlewares/Third_Party/FreeRTOS/Source/portable/RVDS/ARM_CM4F;../Drivers/CMSIS/Device/ST/STM32F4xx/Include;../Drivers/CMSIS/Include;../Application/Inc;../Interface/Inc;../Driver/Inc;../Common/Inc</IncludePath>
             </VariousControls>
           </Aads>
           <LDads>
@@ -603,7 +603,162 @@
         <Group>
           <GroupName>::CMSIS</GroupName>
         </Group>
-      </Groups>
+      <Group>
+      <GroupName>Application</GroupName>
+      <Files>
+        <File>
+          <FileName>app_ctx.c</FileName>
+          <FileType>1</FileType>
+          <FilePath>../Application/Src/app_ctx.c</FilePath>
+        </File>
+        <File>
+          <FileName>app_fsm.c</FileName>
+          <FileType>1</FileType>
+          <FilePath>../Application/Src/app_fsm.c</FilePath>
+        </File>
+        <File>
+          <FileName>app_heartbeat.c</FileName>
+          <FileType>1</FileType>
+          <FilePath>../Application/Src/app_heartbeat.c</FilePath>
+        </File>
+        <File>
+          <FileName>app_protocol.c</FileName>
+          <FileType>1</FileType>
+          <FilePath>../Application/Src/app_protocol.c</FilePath>
+        </File>
+        <File>
+          <FileName>app_tasks.c</FileName>
+          <FileType>1</FileType>
+          <FilePath>../Application/Src/app_tasks.c</FilePath>
+        </File>
+        <File>
+          <FileName>task_alarm.c</FileName>
+          <FileType>1</FileType>
+          <FilePath>../Application/Src/task_alarm.c</FilePath>
+        </File>
+        <File>
+          <FileName>task_config.c</FileName>
+          <FileType>1</FileType>
+          <FilePath>../Application/Src/task_config.c</FilePath>
+        </File>
+        <File>
+          <FileName>task_control.c</FileName>
+          <FileType>1</FileType>
+          <FilePath>../Application/Src/task_control.c</FilePath>
+        </File>
+        <File>
+          <FileName>task_dog.c</FileName>
+          <FileType>1</FileType>
+          <FilePath>../Application/Src/task_dog.c</FilePath>
+        </File>
+        <File>
+          <FileName>task_net.c</FileName>
+          <FileType>1</FileType>
+          <FilePath>../Application/Src/task_net.c</FilePath>
+        </File>
+        <File>
+          <FileName>task_sensor.c</FileName>
+          <FileType>1</FileType>
+          <FilePath>../Application/Src/task_sensor.c</FilePath>
+        </File>
+      </Files>
+    </Group>
+    <Group>
+      <GroupName>Interface</GroupName>
+      <Files>
+        <File>
+          <FileName>if_alarm.c</FileName>
+          <FileType>1</FileType>
+          <FilePath>../Interface/Src/if_alarm.c</FilePath>
+        </File>
+        <File>
+          <FileName>if_input.c</FileName>
+          <FileType>1</FileType>
+          <FilePath>../Interface/Src/if_input.c</FilePath>
+        </File>
+        <File>
+          <FileName>if_log.c</FileName>
+          <FileType>1</FileType>
+          <FilePath>../Interface/Src/if_log.c</FilePath>
+        </File>
+        <File>
+          <FileName>if_net.c</FileName>
+          <FileType>1</FileType>
+          <FilePath>../Interface/Src/if_net.c</FilePath>
+        </File>
+        <File>
+          <FileName>if_sensor.c</FileName>
+          <FileType>1</FileType>
+          <FilePath>../Interface/Src/if_sensor.c</FilePath>
+        </File>
+        <File>
+          <FileName>if_store.c</FileName>
+          <FileType>1</FileType>
+          <FilePath>../Interface/Src/if_store.c</FilePath>
+        </File>
+      </Files>
+    </Group>
+    <Group>
+      <GroupName>Driver</GroupName>
+      <Files>
+        <File>
+          <FileName>drv_24c02.c</FileName>
+          <FileType>1</FileType>
+          <FilePath>../Driver/Src/drv_24c02.c</FilePath>
+        </File>
+        <File>
+          <FileName>drv_dht11.c</FileName>
+          <FileType>1</FileType>
+          <FilePath>../Driver/Src/drv_dht11.c</FilePath>
+        </File>
+        <File>
+          <FileName>drv_gpio.c</FileName>
+          <FileType>1</FileType>
+          <FilePath>../Driver/Src/drv_gpio.c</FilePath>
+        </File>
+        <File>
+          <FileName>drv_pwm.c</FileName>
+          <FileType>1</FileType>
+          <FilePath>../Driver/Src/drv_pwm.c</FilePath>
+        </File>
+        <File>
+          <FileName>drv_uart.c</FileName>
+          <FileType>1</FileType>
+          <FilePath>../Driver/Src/drv_uart.c</FilePath>
+        </File>
+      </Files>
+    </Group>
+    <Group>
+      <GroupName>Common</GroupName>
+      <Files>
+        <File>
+          <FileName>cm_crc.c</FileName>
+          <FileType>1</FileType>
+          <FilePath>../Common/Src/cm_crc.c</FilePath>
+        </File>
+        <File>
+          <FileName>cm_json.c</FileName>
+          <FileType>1</FileType>
+          <FilePath>../Common/Src/cm_json.c</FilePath>
+        </File>
+        <File>
+          <FileName>cm_log.c</FileName>
+          <FileType>1</FileType>
+          <FilePath>../Common/Src/cm_log.c</FilePath>
+        </File>
+        <File>
+          <FileName>cm_ringbuf.c</FileName>
+          <FileType>1</FileType>
+          <FilePath>../Common/Src/cm_ringbuf.c</FilePath>
+        </File>
+        <File>
+          <FileName>cm_time.c</FileName>
+          <FileType>1</FileType>
+          <FilePath>../Common/Src/cm_time.c</FilePath>
+        </File>
+      </Files>
+    </Group>
+    </Groups>
     </Target>
   </Targets>
   <RTE>
