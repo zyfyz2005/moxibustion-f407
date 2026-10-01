@@ -18,6 +18,8 @@
 
 #include "cm_types.h"
 
+#include "stm32f4xx_hal.h"
+
 /** 会话状态 */
 typedef enum {
     IF_NET_ST_RESET = 0,       /**< 上电初始，等待第一次 poll 启动流程 */
@@ -45,13 +47,22 @@ typedef struct {
 /** 收到下行报文时的回调（在 if_net_poll 的调用者上下文里执行） */
 typedef void (*if_net_rx_fn)(const char *payload, uint16_t len, void *user);
 
-/** @brief 绑定参数并复位状态机（USART3 的 DMA + 空闲中断由 Driver 层初始化） */
-cm_err_t if_net_init(const if_net_cfg_t *cfg);
+/**
+ * @brief 绑定参数、初始化 USART3 的 DMA + 空闲中断接收，并复位状态机
+ * @param cfg   连接参数
+ * @param huart CubeMX 生成的 USART3 句柄（它的 hdmarx/hdmatx 已由 MspInit 链接好）
+ * @return CM_OK；CM_ERR_PARAM 参数为空；CM_ERR_IO 启动 DMA 接收失败
+ * @note **M1 阶段这里只做到"收得到字节不丢"**：状态机停在 IF_NET_ST_RESET，
+ *       永远离线。AT 命令状态机、WiFi/MQTT 会话是 M4 的活，会填在 if_net_poll 里
+ */
+cm_err_t if_net_init(const if_net_cfg_t *cfg, UART_HandleTypeDef *huart);
 
 /**
  * @brief 注册下行报文回调
  * @param cb   回调函数；传 NULL 表示取消注册
  * @param user 回调时原样透传的用户指针
+ * @note **M1 阶段只保留接口、不做实际分发**：这时收到的是原始字节流，判不出报文边界；
+ *       M4 接上 AT 状态机与 URC 解析后才真正回调。接口签名不变，上层不用跟着改
  * @note 回调在 if_net_poll 的调用者上下文里执行，也就是 NetTask 里，
  *       所以回调里可以做入队这类非阻塞操作，但不要长时间阻塞
  */
@@ -92,3 +103,13 @@ bool if_net_mqtt_capable(void);
 
 /** @brief 错误计数：AT 超时/失败、MQTT 连接失败、URC 解析失败等累加 */
 uint32_t if_net_err_cnt(void);
+
+/**
+ * @brief 累计从模组口收到的字节数
+ * @note M1 出口自检"USART3 的 DMA + 空闲中断收到字节不丢"就看这个数：
+ *       往模组口发数据，这个计数应该跟着涨，且丢字节计数保持 0
+ */
+uint32_t if_net_rx_bytes(void);
+
+/** @brief 累计被丢弃的字节数（环形缓冲满导致）；正常应为 0 */
+uint32_t if_net_rx_dropped(void);

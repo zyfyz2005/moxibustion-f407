@@ -24,8 +24,13 @@
 #define IF_INPUT_KEY_RESET   (1u << 2)   /**< PE4（板子丝印 KEY0），按下为低 */
 #define IF_INPUT_KEY_ALL     (IF_INPUT_KEY_POWER | IF_INPUT_KEY_MUTE | IF_INPUT_KEY_RESET)
 
-/** @brief 初始化：把三个按键脚按上下拉配好 */
-cm_err_t if_input_init(void);
+/**
+ * @brief 初始化
+ * @param debounce_ms 消抖时间窗，单位 ms（计划书定的是 30）
+ * @note 从参数传而不是写死：Interface 层不依赖 Application 的 `app_cfg.h`，
+ *       这个值由 ControlTask 从 `APP_KEY_DEBOUNCE_MS` 取来传进来
+ */
+cm_err_t if_input_init(uint32_t debounce_ms);
 
 /**
  * @brief 扫描一次，返回**本轮新产生按下沿**的按键位

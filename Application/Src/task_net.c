@@ -27,6 +27,8 @@
 
 #include "if_net.h"
 
+#include "usart.h"      /* huart3：模组串口句柄（CubeMX 生成） */
+
 /* 静态缓冲：计划书明确要求 NetTask 的 JSON / AT 缓冲一律静态分配，不放栈上 */
 static char s_tele_buf[APP_TELE_PAYLOAD_MAX];
 static char s_ack_buf[APP_ACK_PAYLOAD_MAX];
@@ -281,6 +283,7 @@ void task_net(void *arg)
 {
     TickType_t     last_wake = xTaskGetTickCount();
     uint32_t       last_tele;
+    uint32_t       last_stat_ms;
     if_net_state_e last_st   = IF_NET_ST_RESET;
 
     CM_UNUSED(arg);
@@ -288,13 +291,14 @@ void task_net(void *arg)
     s_current_valid = false;
 
     net_cfg_init();
-    if (if_net_init(&s_cfg) != CM_OK) {
+    if (if_net_init(&s_cfg, &huart3) != CM_OK) {
         app_err_inc(APP_ERR_AT);
         cm_log_printf("net: init failed");
     }
     if_net_set_downlink_cb(net_on_downlink, NULL);
 
     last_tele = app_now_ms();
+    last_stat_ms = last_tele;
 
     for (;;) {
         uint32_t now = app_now_ms();
@@ -326,6 +330,15 @@ void task_net(void *arg)
         }
 
         /* 7. 心跳：等 AT 响应的过程中也在推进，期限 2s */
+        if (cm_timeout_expired(now, last_stat_ms, APP_NET_STAT_PERIOD_MS)) {
+            last_stat_ms = now;
+            /* M1 阶段联网自检就看这一行：往模组口发数据时 rx 应该跟着涨、drop 保持 0 */
+            cm_log_printf("net: %s rx=%u B drop=%u",
+                          if_net_state_str(if_net_state()),
+                          (unsigned)if_net_rx_bytes(),
+                          (unsigned)if_net_rx_dropped());
+        }
+
         app_hb_kick(APP_HB_NET, app_now_ms());
 
         vTaskDelayUntil(&last_wake, pdMS_TO_TICKS(APP_NET_SLICE_MS));

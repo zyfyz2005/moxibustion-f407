@@ -322,7 +322,7 @@ void task_control(void *arg)
 
     s_pending.active = 0u;
 
-    (void)if_input_init();
+    (void)if_input_init(APP_KEY_DEBOUNCE_MS);
 
     app_state_take(&state);
     prev_state = state;

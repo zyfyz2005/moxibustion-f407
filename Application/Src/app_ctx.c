@@ -8,6 +8,10 @@
 
 #include "cm_log.h"
 
+#include "if_log.h"
+
+#include "usart.h"      /* huart1：调试串口句柄（CubeMX 生成） */
+
 /*============================ 句柄定义 ============================*/
 
 QueueHandle_t      q_sensor   = NULL;
@@ -166,6 +170,49 @@ void app_wdt_feed(void)
     if (s_wdt_feed != NULL) {
         s_wdt_feed();
     }
+}
+
+/*============================ 日志 ============================*/
+
+/**
+ * @brief 日志加锁
+ * @note 两点必须判断：① 互斥量还没创建（app_ctx_init 之前）不能拿；
+ *       ② 调度器没启动时拿互斥量会触发 configASSERT（死循环），
+ *       而开机早期就可能打日志，所以先问一句调度器状态
+ */
+static void log_lock(void *user)
+{
+    CM_UNUSED(user);
+
+    if ((mtx_dbg_uart != NULL) &&
+        (xTaskGetSchedulerState() != taskSCHEDULER_NOT_STARTED)) {
+        (void)xSemaphoreTake(mtx_dbg_uart, portMAX_DELAY);
+    }
+}
+
+static void log_unlock(void *user)
+{
+    CM_UNUSED(user);
+
+    if ((mtx_dbg_uart != NULL) &&
+        (xTaskGetSchedulerState() != taskSCHEDULER_NOT_STARTED)) {
+        (void)xSemaphoreGive(mtx_dbg_uart);
+    }
+}
+
+/** @brief 日志时间戳来源：uptime 秒（ControlTask 每秒刷新的镜像） */
+static uint32_t log_time_source(void *user)
+{
+    CM_UNUSED(user);
+    return s_uptime_s;
+}
+
+void app_log_init(void)
+{
+    if (if_log_init(&huart1, log_lock, log_unlock, NULL) != CM_OK) {
+        return;     /* 接不上就一直静默丢弃日志，不影响功能 */
+    }
+    cm_log_set_time_source(log_time_source, NULL);
 }
 
 /*============================ 时间 ============================*/

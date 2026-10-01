@@ -131,8 +131,9 @@ uint16_t app_err_total(void);
 /*============================ 日志 ============================*/
 
 /**
- * @brief 把 cm_log 的写口接到 USART1 和 mtx_dbg_uart 上。
- * @note 实现依赖 Driver 层 drv_uart（第 4 步随驱动一起补）。
- *       在此之前所有日志静默丢弃，不影响纯逻辑验证。
+ * @brief 把日志接到调试串口 USART1 上
+ * @note 接线走 Interface 层的 `if_log`——Application 不直接调 Driver；
+ *       加锁用 `mtx_dbg_uart`，并且会先判断调度器是否已启动：
+ *       开机早期（还在 `main()` 里）打日志时不会去拿互斥量
  */
 void app_log_init(void);

@@ -27,20 +27,39 @@
 
 #include "cm_types.h"
 
-/** 报警类型 */
+/**
+ * 报警输出的"档位"。
+ * 这里刻意**不叫** WAITING/COUNTDOWN/ALARM——那是 ControlTask 的状态机词汇，
+ * 本模块只管"输出长什么样"。AlarmTask 负责把状态机的状态映射到这几个档位上。
+ */
 typedef enum {
-    IF_ALARM_NONE = 0,      /**< 不报警 */
-    IF_ALARM_TEMP,          /**< 温度报警：2 kHz */
-    IF_ALARM_COUNTDOWN,     /**< 倒计时报警：3 kHz */
+    IF_ALARM_IDLE = 0,      /**< 待机：两灯全灭、蜂鸣器不响 */
+    IF_ALARM_RUNNING,       /**< 倒计时进行中：LED0 常亮、蜂鸣器不响 */
+    IF_ALARM_TEMP,          /**< 温度报警：2 kHz，LED1 跟着响 */
+    IF_ALARM_COUNTDOWN,     /**< 倒计时归零报警：3 kHz，LED1 跟着响 */
 } if_alarm_kind_e;
 
-/** @brief 初始化：TIM13_CH1 PWM 停振、两灯熄灭 */
-cm_err_t if_alarm_init(void);
+/** 输出参数（由 AlarmTask 从 app_cfg.h 取好传进来，避免 Interface 依赖 Application） */
+typedef struct {
+    uint32_t freq_temp_hz;      /**< 温度报警频率，单位 Hz（计划书：2000） */
+    uint32_t freq_countdown_hz; /**< 倒计时报警频率，单位 Hz（计划书：3000） */
+    uint32_t on_ms;             /**< 报警节奏的"响"段，单位 ms（计划书：200） */
+    uint32_t off_ms;            /**< 报警节奏的"停"段，单位 ms（计划书：150） */
+    uint32_t mute_blink_ms;     /**< 静音时 LED1 慢闪的半周期，单位 ms */
+} if_alarm_cfg_t;
 
 /**
- * @brief 设定当前报警类型（不改变静音标志）
- * @note 在 IF_ALARM_NONE 与某类报警之间切换时，节奏从"响"重新开始，
- *       避免切类型时出现半截节奏
+ * @brief 初始化：PWM 停振、两灯熄灭
+ * @param cfg 输出参数（频率与节奏）
+ * @return CM_OK；CM_ERR_PARAM 参数不合法（指针为空或频率/节奏为 0）
+ */
+cm_err_t if_alarm_init(const if_alarm_cfg_t *cfg);
+
+/**
+ * @brief 切换输出档位（不改变静音标志）
+ * @param kind 目标档位
+ * @note 档位变化时节奏从"响"重新开始，避免切档时出现半截节奏；
+ *       从报警档切到 IF_ALARM_IDLE / IF_ALARM_RUNNING 会停掉蜂鸣器
  */
 void if_alarm_set(if_alarm_kind_e kind);
 

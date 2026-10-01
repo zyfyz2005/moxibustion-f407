@@ -123,8 +123,9 @@
  * 五、缓冲尺寸（全部静态分配，运行期禁止 malloc）
  *==============================================================*/
 
-#define APP_AT_RX_RING_SIZE         512u     /* USART3 接收环形缓冲 */
-#define APP_AT_TX_RING_SIZE         512u     /* USART3 发送环形缓冲 */
+/* USART3 的收发缓冲不在这里：它们属于 Driver 层，定义在 Driver/Inc/drv_uart.h
+ * （DRV_UART_NET_DMA_BUF_SIZE / RING_SIZE / TX_BUF_SIZE）。
+ * 在 Application 里再写一份必然出现"改一处忘一处"，所以只留一个出处。 */
 #define APP_AT_RESP_MAX             256u     /* 一条 AT 响应的最大长度 */
 #define APP_TELE_PAYLOAD_MAX        288u     /* 遥测 JSON 最大长度 */
 #define APP_ACK_PAYLOAD_MAX         96u      /* ACK JSON 最大长度 */
@@ -166,6 +167,7 @@
 
 #define APP_HEAP_PRINT_PERIOD_MS    30000u   /* ControlTask 每 30s 打印堆占用 */
 #define APP_STAT_PRINT_PERIOD_MS    60000u   /* 每 60s 打印 DHT11 失败统计 */
+#define APP_NET_STAT_PERIOD_MS      30000u   /* NetTask 每 30s 打印一行联网自检（M1 看收字节数） */
 
 /**
  * 栈高水位打印开关。

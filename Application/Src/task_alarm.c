@@ -16,13 +16,23 @@
 
 #include "if_alarm.h"
 
+/* 输出参数从 app_cfg.h 取，一次性交给 Interface 层；
+ * 这样"频率/节奏"这个参数的唯一来源仍然是 app_cfg.h，而 Interface 不必依赖 Application */
+static const if_alarm_cfg_t s_alarm_cfg = {
+    .freq_temp_hz      = APP_ALARM_FREQ_TEMP_HZ,
+    .freq_countdown_hz = APP_ALARM_FREQ_CD_HZ,
+    .on_ms             = APP_ALARM_ON_MS,
+    .off_ms            = APP_ALARM_OFF_MS,
+    .mute_blink_ms     = APP_ALARM_MUTE_BLINK_MS,
+};
+
 void task_alarm(void *arg)
 {
     MoxaState_t state;
 
     CM_UNUSED(arg);
 
-    (void)if_alarm_init();
+    (void)if_alarm_init(&s_alarm_cfg);
 
     for (;;) {
         uint32_t now;
@@ -42,12 +52,14 @@ void task_alarm(void *arg)
             } else if (state.temp_alarm != 0u) {
                 if_alarm_set(IF_ALARM_TEMP);
             } else {
-                if_alarm_set(IF_ALARM_NONE);
+                if_alarm_set(IF_ALARM_IDLE);
             }
-            if_alarm_set_mute(state.muted != 0u);
+        } else if (state.state == (uint8_t)MOXA_ST_COUNTDOWN) {
+            if_alarm_set(IF_ALARM_RUNNING);     /* 倒计时中：LED0 常亮、蜂鸣器不响 */
         } else {
-            if_alarm_stop();
+            if_alarm_stop();                    /* 待机：两灯全灭 */
         }
+        if_alarm_set_mute(state.muted != 0u);
 
         if_alarm_tick(now);
         app_hb_kick(APP_HB_ALARM, now);

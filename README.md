@@ -99,10 +99,27 @@ Project-20261001-moxibustion-f407/
 | `if_store.c/h` | `load()` / `save()` 配置 | 24C02（I2C1）+ CRC8 |
 | `if_alarm.c/h` | `set(kind)` / `mute()` / `stop()` 报警语义 | 蜂鸣器 PWM（PF8）+ LED（PF9/PF10） |
 | `if_input.c/h` | 按键按下沿（`poll`）、按下状态 | 三个按键脚（PA0/PE3/PE4）+ 30ms 消抖 |
+| `if_log.c/h` | 把 `cm_log` 接到调试串口（接线用，不含格式化） | USART1 阻塞发送 + 上层给的互斥量 |
 
 > `if_input` 是补进清单的：按键消抖按计划书写在 ControlTask，但"读引脚电平"属于 Driver，
 > 中间缺一层会迫使 Application 直接调 Driver，破坏分层。报文语义（JSON 怎么拼/怎么解析）
 > 留在 Application 的 `app_protocol.c`，`if_net` 只负责传输。
+>
+> `if_log` 是同一个道理：`cm_log` 在 Common 层，只能靠注册回调拿到写口和锁；
+> 而"写口是哪个串口、锁是哪个互斥量"只有上层知道。这个接线动作如果写在 Application 里，
+> Application 就得直接调 `drv_uart`——跨层。放在 Interface 正合适。
+
+### 参数怎么从 Application 流到下层（不破坏分层的做法）
+
+Interface 层**不包含** `app_cfg.h`（那是 Application 的东西），所以可调参数一律**从参数传进去**：
+
+| 下层需要的参数 | 谁传、怎么传 |
+|---|---|
+| 按键消抖时间窗 | `if_input_init(APP_KEY_DEBOUNCE_MS)` |
+| 报警频率与节奏 | `if_alarm_init(&cfg)`，cfg 由 AlarmTask 用 `APP_ALARM_*` 填 |
+| 配置默认值 | `if_store_load(&defaults, &out)` |
+| MQTT/WiFi 连接参数 | `if_net_init(&cfg, &huart3)`，cfg 由 NetTask 用 `MQTT_*` / `WIFI_*` 填 |
+| Driver 自己的缓冲尺寸 | 直接定义在 `Driver/Inc/drv_uart.h`（`DRV_UART_NET_*`），不在 app_cfg.h 里重复一份 |
 
 ### Application/ —— 业务与任务，FreeRTOS 的东西都在这里
 
