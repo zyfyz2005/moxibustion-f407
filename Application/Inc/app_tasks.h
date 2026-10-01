@@ -34,4 +34,3 @@ void task_control(void *arg);
 void task_alarm(void *arg);
 void task_sensor(void *arg);
 void task_net(void *arg);
-void task_config(void *arg);

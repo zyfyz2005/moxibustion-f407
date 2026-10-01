@@ -21,14 +21,11 @@
 extern QueueHandle_t      q_sensor;     /**< SensorTask → ControlTask */
 extern QueueHandle_t      q_cmd;        /**< NetTask    → ControlTask */
 extern QueueHandle_t      q_ack;        /**< ControlTask→ NetTask */
-extern QueueHandle_t      q_cfg_req;    /**< ControlTask→ ConfigTask（深度 1） */
-extern QueueHandle_t      q_cfg_resp;   /**< ConfigTask → ControlTask（深度 2） */
 extern QueueHandle_t      q_at_tx;      /**< NetTask 自产自销的待发队列 */
 
 extern EventGroupHandle_t eg_state;     /**< 状态变更事件组 */
 
 extern SemaphoreHandle_t  mtx_state;    /**< 保护 g_moxa_state */
-extern SemaphoreHandle_t  mtx_config;   /**< 保护 I2C1（运行期唯一持有者 ConfigTask） */
 extern SemaphoreHandle_t  mtx_dbg_uart; /**< 保护调试串口，防日志交错 */
 
 /*============================ 共享状态 ============================*/
@@ -55,14 +52,6 @@ void app_state_commit(MoxaState_t *s);
 
 /** @brief 当前状态序号（诊断用） */
 uint32_t app_state_seq(void);
-
-/**
- * @brief 取下一个配置 token
- * @note 设备侧自有的 16 位单调计数器，回绕时跳过 0；**只有 ControlTask 调用**，
- *       因此不需要加锁。用它匹配配置回执，而不是用客户端的 msg_id——
- *       客户端可能复用 msg_id，撞上迟到的响应就会串到新请求上。
- */
-uint16_t app_token_next(void);
 
 /*============================ 喂狗钩子 ============================*/
 
@@ -108,9 +97,7 @@ typedef enum {
     APP_ERR_AT = 0,      /**< AT 超时 / 失败 */
     APP_ERR_MQTT,        /**< MQTT 连接或发布失败 */
     APP_ERR_JSON,        /**< JSON 组装/解析失败 */
-    APP_ERR_CFG_IO,      /**< 配置读写失败 */
     APP_ERR_QDROP,       /**< 队列满丢弃 */
-    APP_ERR_TOKEN,       /**< 配置 token 不匹配（迟到响应） */
     APP_ERR_BADCMD,      /**< 非法指令 */
     APP_ERR_NO_MSGID,    /**< 下行缺失 msg_id */
     APP_ERR_COUNT,       /**< 分类数目（不是错误） */

@@ -17,23 +17,17 @@
 QueueHandle_t      q_sensor   = NULL;
 QueueHandle_t      q_cmd      = NULL;
 QueueHandle_t      q_ack      = NULL;
-QueueHandle_t      q_cfg_req  = NULL;
-QueueHandle_t      q_cfg_resp = NULL;
 QueueHandle_t      q_at_tx    = NULL;
 
 EventGroupHandle_t eg_state   = NULL;
 
 SemaphoreHandle_t  mtx_state    = NULL;
-SemaphoreHandle_t  mtx_config   = NULL;
 SemaphoreHandle_t  mtx_dbg_uart = NULL;
 
 /*============================ 共享状态 ============================*/
 
 /* 只允许 ControlTask 写入；其他任务一律走 app_state_take() */
 static MoxaState_t s_state;
-
-/* 配置 token：设备侧自有，回绕跳过 0 */
-static uint16_t    s_token = 1u;
 
 /* 喂狗钩子 */
 static app_wdt_feed_fn s_wdt_feed = NULL;
@@ -52,12 +46,10 @@ static bool ctx_create_queues(void)
     q_sensor   = xQueueCreate(APP_Q_SENSOR_LEN,   sizeof(SensorSample_t));
     q_cmd      = xQueueCreate(APP_Q_CMD_LEN,      sizeof(CmdMsg_t));
     q_ack      = xQueueCreate(APP_Q_ACK_LEN,      sizeof(AckMsg_t));
-    q_cfg_req  = xQueueCreate(APP_Q_CFG_REQ_LEN,  sizeof(ConfigReq_t));
-    q_cfg_resp = xQueueCreate(APP_Q_CFG_RESP_LEN, sizeof(ConfigResp_t));
     q_at_tx    = xQueueCreate(APP_Q_AT_TX_LEN,    sizeof(AtTxItem_t));
 
     return (q_sensor != NULL) && (q_cmd != NULL) && (q_ack != NULL) &&
-           (q_cfg_req != NULL) && (q_cfg_resp != NULL) && (q_at_tx != NULL);
+           (q_at_tx != NULL);
 }
 
 cm_err_t app_ctx_init(const moxa_cfg_t *cfg)
@@ -72,11 +64,10 @@ cm_err_t app_ctx_init(const moxa_cfg_t *cfg)
 
     eg_state     = xEventGroupCreate();
     mtx_state    = xSemaphoreCreateMutex();
-    mtx_config   = xSemaphoreCreateMutex();
     mtx_dbg_uart = xSemaphoreCreateMutex();
 
     if ((eg_state == NULL) || (mtx_state == NULL) ||
-        (mtx_config == NULL) || (mtx_dbg_uart == NULL)) {
+        (mtx_dbg_uart == NULL)) {
         return CM_ERR_NOMEM;
     }
 
@@ -95,8 +86,6 @@ cm_err_t app_ctx_init(const moxa_cfg_t *cfg)
     s_state.uptime_s        = 0u;
     s_state.err_cnt         = 0u;
     s_state.seq             = 0u;
-
-    s_token = 1u;
 
     /* 事件位清零，避免事件组初始值带来一个假唤醒 */
     (void)xEventGroupClearBits(eg_state, APP_EVT_ALL_STATE);
@@ -147,15 +136,6 @@ uint32_t app_state_seq(void)
         return seq;
     }
     return s_state.seq;
-}
-
-uint16_t app_token_next(void)
-{
-    s_token++;
-    if (s_token == 0u) {
-        s_token = 1u;        /* 回绕跳过 0：0 保留给"未分配" */
-    }
-    return s_token;
 }
 
 /*============================ 喂狗 ============================*/

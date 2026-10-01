@@ -2,12 +2,13 @@
  * @file task_control.c
  * @brief ControlTask（优先级 5，栈 512 word）
  *
- * 职责：按键消抖、状态机、倒计时、阈值判断、指令校验、配置请求发起、
+ * 职责：按键消抖、状态机、倒计时、阈值判断、指令校验、改参数、
  *       ACK 生成、秒计数、堆占用打印。
  *
  * 两条设计约束：
- *   1. **全程不阻塞**。配置写走异步路径（发请求 → 下一轮收响应，300ms 超时），
- *      所以配置写期间按键和新指令照常响应（验收要求 ≤50ms）。
+ *   1. **全程不阻塞**。改阈值/时长是纯内存操作；删掉 24C02 持久化之后，
+ *      那条异步写路径（发请求、等回执、300ms 超时）整条消失了，
+ *      所以改参数期间按键和新指令照常响应。
  *   2. **只在本地状态上改，改完一次性提交**。g_moxa_state 的唯一写入者是本任务，
  *      提交时自增 seq 并广播事件位。
  */
@@ -24,18 +25,6 @@
 
 #include "if_input.h"
 #include "if_sensor.h"
-
-/** 配置在途状态。只有本任务读写，不需要加锁 */
-typedef struct {
-    uint8_t    active;      /**< 1 = 有一条配置请求在途 */
-    uint16_t   token;       /**< 在途请求的 token，匹配回执只看它 */
-    uint16_t   msg_id;      /**< 回 ACK 时要用客户端给的 msg_id */
-    uint8_t    cmd;         /**< moxa_cmd_e */
-    moxa_cfg_t merged;      /**< 合并后的完整配置，写成功后据此更新状态 */
-    uint32_t   start_ms;    /**< 发出时刻，用于 300ms 超时判定 */
-} pending_cfg_t;
-
-static pending_cfg_t s_pending;
 
 /*============================ 小工具 ============================*/
 
@@ -88,85 +77,9 @@ static bool ctrl_state_changed(const MoxaState_t *previous, const MoxaState_t *c
            (previous->err_cnt         != current->err_cnt);
 }
 
-/*============================ 配置请求 ============================*/
-
-/** 校验通过、且当前没有在途请求时调用：分配 token 并发出请求 */
-static void ctrl_cfg_request(MoxaState_t *state, const CmdMsg_t *msg, uint32_t now)
-{
-    ConfigReq_t request;
-
-    request.msg_id = msg->msg_id;
-    request.token  = app_token_next();
-    request.cmd    = msg->cmd;
-    request.value  = msg->value;
-
-    /* 合并后的完整配置：被改的字段用新值，另一个字段保持当前值。
-     * 不能让 ConfigTask 自己去状态里取另一个字段——写成功之前状态里还是旧值 */
-    request.merged.th_max_c   = state->th_max_c;
-    request.merged.duration_s = state->duration_s;
-    if (msg->cmd == (uint8_t)MOXA_CMD_SET_TH) {
-        request.merged.th_max_c = (uint16_t)msg->value;
-    } else {
-        request.merged.duration_s = (uint32_t)msg->value;
-    }
-
-    if (xQueueSend(q_cfg_req, &request, 0) != pdTRUE) {
-        /* 深度 1 且上面已挡掉"在途"，这里是兜底 */
-        ctrl_ack_emit(state, msg->msg_id, msg->cmd, (uint8_t)MOXA_CODE_BUSY);
-        return;
-    }
-
-    s_pending.active   = 1u;
-    s_pending.token    = request.token;
-    s_pending.msg_id   = request.msg_id;
-    s_pending.cmd      = request.cmd;
-    s_pending.merged   = request.merged;
-    s_pending.start_ms = now;
-
-    cm_log_printf("cfg: set %s=%ld token=%u",
-                  app_cmd_str(request.cmd), (long)request.value, (unsigned)request.token);
-}
-
-/** 收配置回执 + 300ms 超时判定。全程 0 超时，不阻塞 */
-static void ctrl_handle_cfg_resp(MoxaState_t *state, uint32_t now)
-{
-    ConfigResp_t response;
-
-    while (xQueueReceive(q_cfg_resp, &response, 0) == pdTRUE) {
-        /* 先比 token：不匹配就是迟到的响应，丢弃、不动在途状态 */
-        if ((s_pending.active == 0u) || (response.token != s_pending.token)) {
-            app_err_inc(APP_ERR_TOKEN);
-            continue;
-        }
-
-        if (response.ok != 0u) {
-            app_fsm_set_threshold(state, s_pending.merged.th_max_c);
-            app_fsm_set_duration(state, s_pending.merged.duration_s);
-            ctrl_ack_emit(state, s_pending.msg_id, s_pending.cmd, (uint8_t)MOXA_CODE_OK);
-            cm_log_printf("cfg: ok token=%u th=%u dur=%u",
-                          (unsigned)s_pending.token,
-                          (unsigned)s_pending.merged.th_max_c,
-                          (unsigned)s_pending.merged.duration_s);
-        } else {
-            app_err_inc(APP_ERR_CFG_IO);
-            ctrl_ack_emit(state, s_pending.msg_id, s_pending.cmd, (uint8_t)MOXA_CODE_CFG_IO_ERR);
-            cm_log_printf("cfg: io err token=%u", (unsigned)s_pending.token);
-        }
-        s_pending.active = 0u;
-    }
-
-    if ((s_pending.active != 0u) &&
-        cm_timeout_expired(now, s_pending.start_ms, APP_CFG_RESP_TIMEOUT_MS)) {
-        app_err_inc(APP_ERR_CFG_IO);
-        ctrl_ack_emit(state, s_pending.msg_id, s_pending.cmd, (uint8_t)MOXA_CODE_CFG_IO_ERR);
-        s_pending.active = 0u;
-        cm_log_printf("cfg: timeout token=%u", (unsigned)s_pending.token);
-    }
-}
-
 /*============================ 指令处理 ============================*/
 
-static void ctrl_handle_cmd(MoxaState_t *state, const CmdMsg_t *msg, uint32_t now)
+static void ctrl_handle_cmd(MoxaState_t *state, const CmdMsg_t *msg)
 {
     const int32_t value = msg->value;
 
@@ -209,12 +122,16 @@ static void ctrl_handle_cmd(MoxaState_t *state, const CmdMsg_t *msg, uint32_t no
             ctrl_ack_emit(state, msg->msg_id, msg->cmd, (uint8_t)MOXA_CODE_BAD_PARAM);
             break;
         }
-        if (s_pending.active != 0u) {
-            /* 已有配置在途：不排队，直接回忙（计划书第 4 步） */
-            ctrl_ack_emit(state, msg->msg_id, msg->cmd, (uint8_t)MOXA_CODE_BUSY);
-            break;
+        /* 合法：直接改内存、立即生效。
+         * 删掉 24C02 持久化之后就没有"异步写 + 等回执"了，所以
+         * code=3 busy（配置在途）与 code=5（配置读写失败）这两条路径都不再产生 */
+        if (is_threshold) {
+            app_fsm_set_threshold(state, (uint16_t)value);
+        } else {
+            app_fsm_set_duration(state, (uint32_t)value);
         }
-        ctrl_cfg_request(state, msg, now);
+        cm_log_printf("cfg: set %s=%ld", app_cmd_str(msg->cmd), (long)value);
+        ctrl_ack_emit(state, msg->msg_id, msg->cmd, (uint8_t)MOXA_CODE_OK);
         break;
     }
 
@@ -241,7 +158,6 @@ static void ctrl_handle_keys(MoxaState_t *state, uint32_t now)
     }
     if ((mask & IF_INPUT_KEY_RESET) != 0u) {
         app_fsm_reset(state);
-        s_pending.active = 0u;   /* 复位把在途配置请求一并作废 */
         cm_log_printf("key: reset");
     }
 }
@@ -320,8 +236,6 @@ void task_control(void *arg)
 
     CM_UNUSED(arg);
 
-    s_pending.active = 0u;
-
     (void)if_input_init(APP_KEY_DEBOUNCE_MS);
 
     app_state_take(&state);
@@ -353,17 +267,14 @@ void task_control(void *arg)
         {
             CmdMsg_t msg;
             while (xQueueReceive(q_cmd, &msg, 0) == pdTRUE) {
-                ctrl_handle_cmd(&state, &msg, now);
+                ctrl_handle_cmd(&state, &msg);
             }
         }
 
-        /* 4. 配置回执与超时 */
-        ctrl_handle_cfg_resp(&state, now);
-
-        /* 5. 报警条件与状态迁移 */
+        /* 4. 报警条件与状态迁移 */
         app_fsm_eval(&state);
 
-        /* 6. 秒计数：倒计时递减 + uptime 各走一份，互不干扰。
+        /* 5. 秒计数：倒计时递减 + uptime 各走一份，互不干扰。
          *    用实际时间差而不是写死的 10ms，免得任务被抢占时秒数走慢 */
         if (cm_sec_counter_add(&uptime_counter, delta_ms)) {
             app_fsm_tick_1s(&state);
@@ -371,20 +282,20 @@ void task_control(void *arg)
             app_uptime_set(state.uptime_s);     /* 给日志时间戳用的镜像 */
         }
 
-        /* 7. 全系统错误计数汇总（各任务分类累加，这里合并进状态） */
+        /* 6. 全系统错误计数汇总（各任务分类累加，这里合并进状态） */
         state.err_cnt = app_err_total();
 
-        /* 8. 有实质变化才提交并广播，避免每秒上百次无谓唤醒 */
+        /* 7. 有实质变化才提交并广播，避免每秒上百次无谓唤醒 */
         if (ctrl_state_changed(&prev_state, &state)) {
             app_state_commit(&state);
             prev_state = state;
         }
 
-        /* 9. 诊断打印 */
+        /* 8. 诊断打印 */
         ctrl_print_diag(&state, now, &last_diag_ms);
         ctrl_print_sensor_stat(now, &last_stat_ms);
 
-        /* 10. 心跳：本任务期限 100ms，每轮 10ms 推进一次 */
+        /* 9. 心跳：本任务期限 100ms，每轮 10ms 推进一次 */
         app_hb_kick(APP_HB_CTRL, app_now_ms());
 
         vTaskDelayUntil(&last_wake, pdMS_TO_TICKS(APP_CTRL_PERIOD_MS));

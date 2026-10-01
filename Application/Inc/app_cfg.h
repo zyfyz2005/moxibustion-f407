@@ -19,14 +19,12 @@
 #define APP_PRIO_ALARM      4
 #define APP_PRIO_SENSOR     3
 #define APP_PRIO_NET        2
-#define APP_PRIO_CONFIG     1
 
 #define APP_STACK_DOG       256
 #define APP_STACK_CONTROL   512
 #define APP_STACK_ALARM     256
 #define APP_STACK_SENSOR    256
 #define APP_STACK_NET       1024
-#define APP_STACK_CONFIG    256
 
 /* 任务名（最多 configMAX_TASK_NAME_LEN - 1 个字符） */
 #define APP_TASK_NAME_DOG       "dog"
@@ -34,7 +32,6 @@
 #define APP_TASK_NAME_ALARM     "alarm"
 #define APP_TASK_NAME_SENSOR    "sensor"
 #define APP_TASK_NAME_NET       "net"
-#define APP_TASK_NAME_CONFIG    "config"
 
 /*==============================================================
  * 二、心跳与看门狗
@@ -44,7 +41,6 @@
  *   AlarmTask    每 50ms 调一次                    期限 500 ms
  *   SensorTask   采集开始前 + 结束后各一次          期限 2.5 s
  *   NetTask      AT 等待循环内每 200ms 推进一次      期限 2 s
- *   ConfigTask   空闲循环每 500ms、24C02 每页之间    期限 2 s
  *
  * 最坏复位时间推导（计划书第六节，改下面任何一个数都要重算并同步验收标准）：
  *   最坏复位时间 = 最大心跳期限 + DogTask 检查周期 + IWDG 超时
@@ -54,13 +50,11 @@
 
 #define APP_CTRL_PERIOD_MS          10u      /* ControlTask 轮询周期 */
 #define APP_ALARM_TICK_MS           50u      /* AlarmTask 周期（也是报警节奏的推进粒度） */
-#define APP_CONFIG_IDLE_MS          500u     /* ConfigTask 空闲等待 */
 
 #define APP_HB_CTRL_MS              100u
 #define APP_HB_ALARM_MS             500u
 #define APP_HB_SENSOR_MS            2500u
 #define APP_HB_NET_MS               2000u
-#define APP_HB_CONFIG_MS            2000u
 
 #define APP_DOG_PERIOD_MS           500u     /* DogTask 检查周期 */
 #define APP_IWDG_TIMEOUT_MS         4000u    /* IWDG 超时（LSI≈32kHz，32 分频 → 4000 tick） */
@@ -98,25 +92,17 @@
 #define APP_ALARM_FREQ_CD_HZ        3000u    /* 倒计时报警 3kHz */
 #define APP_ALARM_MUTE_BLINK_MS     500u     /* 静音时 LED1 慢闪半周期 */
 
-/* 配置写在途超时：ControlTask 发出请求后等这么久没收到匹配回执，就回 code=5 并清在途标记
- * （计划书第二节配置写路径第 7 步的 300ms） */
-#define APP_CFG_RESP_TIMEOUT_MS     300u
-
 /*==============================================================
  * 四、队列深度（计划书第二节"队列与满策略"）
  *   sensor      4   满：丢最旧再入队
  *   cmd         8   满：NetTask 0 超时，失败直接回 busy
  *   ack         8   满：丢队头最旧一条腾格子（绝不阻塞）
- *   cfg_req     1   同一时刻只允许一条配置请求在途
- *   cfg_resp    2   让"迟到响应与新响应重叠"结构性不可能
  *   at_tx       8   满：优先丢最旧 TELEMETRY
  *==============================================================*/
 
 #define APP_Q_SENSOR_LEN            4u
 #define APP_Q_CMD_LEN               8u
 #define APP_Q_ACK_LEN               8u
-#define APP_Q_CFG_REQ_LEN           1u
-#define APP_Q_CFG_RESP_LEN          2u
 #define APP_Q_AT_TX_LEN             8u
 
 /*==============================================================

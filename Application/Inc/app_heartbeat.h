@@ -19,7 +19,6 @@ typedef enum {
     APP_HB_ALARM,
     APP_HB_SENSOR,
     APP_HB_NET,
-    APP_HB_CONFIG,
     APP_HB_COUNT,
 } app_hb_id_e;
 

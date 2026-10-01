@@ -637,11 +637,6 @@
           <FilePath>../Application/Src/task_alarm.c</FilePath>
         </File>
         <File>
-          <FileName>task_config.c</FileName>
-          <FileType>1</FileType>
-          <FilePath>../Application/Src/task_config.c</FilePath>
-        </File>
-        <File>
           <FileName>task_control.c</FileName>
           <FileType>1</FileType>
           <FilePath>../Application/Src/task_control.c</FilePath>
@@ -691,21 +686,11 @@
           <FileType>1</FileType>
           <FilePath>../Interface/Src/if_sensor.c</FilePath>
         </File>
-        <File>
-          <FileName>if_store.c</FileName>
-          <FileType>1</FileType>
-          <FilePath>../Interface/Src/if_store.c</FilePath>
-        </File>
       </Files>
     </Group>
     <Group>
       <GroupName>Driver</GroupName>
       <Files>
-        <File>
-          <FileName>drv_24c02.c</FileName>
-          <FileType>1</FileType>
-          <FilePath>../Driver/Src/drv_24c02.c</FilePath>
-        </File>
         <File>
           <FileName>drv_dht11.c</FileName>
           <FileType>1</FileType>

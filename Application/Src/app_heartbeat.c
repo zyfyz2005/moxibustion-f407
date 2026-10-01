@@ -16,7 +16,6 @@ static const uint32_t s_deadline_ms[APP_HB_COUNT] = {
     [APP_HB_ALARM]  = APP_HB_ALARM_MS,
     [APP_HB_SENSOR] = APP_HB_SENSOR_MS,
     [APP_HB_NET]    = APP_HB_NET_MS,
-    [APP_HB_CONFIG] = APP_HB_CONFIG_MS,
 };
 
 static const char *const s_task_name[APP_HB_COUNT] = {
@@ -24,7 +23,6 @@ static const char *const s_task_name[APP_HB_COUNT] = {
     [APP_HB_ALARM]  = "alarm",
     [APP_HB_SENSOR] = "sensor",
     [APP_HB_NET]    = "net",
-    [APP_HB_CONFIG] = "config",
 };
 
 void app_hb_init(uint32_t now_ms)

@@ -7,7 +7,18 @@
 #pragma once
 
 #include "cm_types.h"
-#include "if_store.h"       /* moxa_cfg_t */
+
+/*============================ 运行时配置 ============================*/
+
+/**
+ * 运行时要用的两个可调值。
+ * 原本定义在 Interface 层的 `if_store.h` 里（那时它是"要落盘的东西"）；
+ * 删掉 24C02 持久化之后，它只剩"内存里的配置载体"这一个身份，所以搬到应用层。
+ */
+typedef struct {
+    uint16_t th_max_c;      /**< 高温阈值，单位 ℃，范围 [APP_TH_MIN_C, APP_TH_MAX_C] */
+    uint32_t duration_s;    /**< 倒计时时长，单位 s，范围 [APP_DUR_MIN_S, APP_DUR_MAX_S] */
+} moxa_cfg_t;
 
 /*============================ 状态机 ============================*/
 
@@ -81,33 +92,6 @@ typedef struct {
     uint8_t  code;       /**< moxa_ack_code_e */
     uint8_t  state;      /**< 以 ControlTask 生成时刻为准，不在发送时刷新 */
 } AckMsg_t;
-
-/*============================ 配置读写 ============================*/
-
-/** 配置请求：ControlTask → ConfigTask（深度 1，同一时刻只允许一条在途） */
-typedef struct {
-    uint16_t   msg_id;   /**< 只为日志与回执溯源 */
-    uint16_t   token;    /**< 设备侧自有的 16 位计数器，匹配只看它 */
-    uint8_t    cmd;      /**< moxa_cmd_e，日志用 */
-    int32_t    value;    /**< 本次要改成的值，日志用 */
-
-    /**
-     * 合并后的完整配置——本实现补的字段。
-     *
-     * 计划书的 ConfigReq_t 只有 msg_id/token/cmd/value。但 ConfigTask 要把
-     * "阈值和时长"两个字段一起写进 24C02，而它手里只有被改的那一个值；
-     * 想从 g_moxa_state 里补另一个字段是不行的——按设计，状态里的阈值/时长
-     * 是"写成功之后"才更新的，此刻读到的还是旧值，于是会把旧值当成新值写回去。
-     * 所以由 ControlTask 在发起请求时就把两个字段合并好，随请求一起递过去。
-     */
-    moxa_cfg_t merged;
-} ConfigReq_t;
-
-/** 配置响应：ConfigTask → ControlTask */
-typedef struct {
-    uint16_t token;      /**< 原样回带，匹配只看它 */
-    uint8_t  ok;         /**< 1 = 写成功，0 = 失败 */
-} ConfigResp_t;
 
 /*============================ 上行待发 ============================*/
 
