@@ -16,7 +16,7 @@ Application   业务：FreeRTOS 任务、状态机、协议报文
 Interface     模块语义：温湿度服务 / 联网服务 / 存储服务 / 报警服务
      │
      ▼
-Driver        器件驱动：DHT11 时序、24C02 页写、蜂鸣器 PWM、串口 DMA
+Driver        器件驱动：DHT11 时序、蜂鸣器 PWM、串口 DMA、按键与 LED
      │
      ▼
 Core / HAL    CubeMX 生成，只读
@@ -31,7 +31,7 @@ Common        公共工具，任何层都能用，它自己只依赖标准库
 
 分层的实际收益（不是形式主义）：
 
-- 换云平台（easyiothings → 自建 broker）：只改 `if_net` 和宏配置，6 个任务一行不动
+- 换云平台（easyiothings → 自建 broker）：只改 `if_net` 和宏配置，5 个任务一行不动
 - 调试口（USART1）和模组口（USART3）共用一套串口驱动：`drv_uart` 被复用两次，只是实例参数不同
 - 以后换主控（F407 → 别的型号）：只有 Driver 层要重写，Application 一行不动
 
@@ -84,7 +84,6 @@ Project-20261001-moxibustion-f407/
 |---|---|
 | `drv_uart.c/h` | 串口 DMA + IDLE 收发、环形缓冲（USART1 调试、USART3 模组） |
 | `drv_dht11.c/h` | DHT11 40 bit 单总线时序（PG9） |
-| `drv_24c02.c/h` | 24C02 字节读写 + 8 字节页拆包（PB8/PB9，I2C1；**7 位从机地址 0x50，调 HAL 时左移一位用 0xA0**） |
 | `drv_pwm.c/h` | 蜂鸣器 PWM 启停与频率设定（PF8 / **TIM13_CH1**，APB1 → 84 MHz） |
 | `drv_gpio.c/h` | 按键电平（PA0/PE3/PE4）、LED（PF9/PF10）、模组使能（PF6） |
 
@@ -96,7 +95,6 @@ Project-20261001-moxibustion-f407/
 |---|---|---|
 | `if_sensor.c/h` | 读温湿度、失败计数 | DHT11 单总线（PG9） |
 | `if_net.c/h` | 连接管理、`publish(topic, payload, retain)`、下行报文回调 | AT 指令（USART3）+ MQTT 会话 |
-| `if_store.c/h` | `load()` / `save()` 配置 | 24C02（I2C1）+ CRC8 |
 | `if_alarm.c/h` | `set(kind)` / `mute()` / `stop()` 报警语义 | 蜂鸣器 PWM（PF8）+ LED（PF9/PF10） |
 | `if_input.c/h` | 按键按下沿（`poll`）、按下状态 | 三个按键脚（PA0/PE3/PE4）+ 30ms 消抖 |
 | `if_log.c/h` | 把 `cm_log` 接到调试串口（接线用，不含格式化） | USART1 阻塞发送 + 上层给的互斥量 |
@@ -117,7 +115,6 @@ Interface 层**不包含** `app_cfg.h`（那是 Application 的东西），所�
 |---|---|
 | 按键消抖时间窗 | `if_input_init(APP_KEY_DEBOUNCE_MS)` |
 | 报警频率与节奏 | `if_alarm_init(&cfg)`，cfg 由 AlarmTask 用 `APP_ALARM_*` 填 |
-| 配置默认值 | `if_store_load(&defaults, &out)` |
 | MQTT/WiFi 连接参数 | `if_net_init(&cfg, &huart3)`，cfg 由 NetTask 用 `MQTT_*` / `WIFI_*` 填 |
 | Driver 自己的缓冲尺寸 | 直接定义在 `Driver/Inc/drv_uart.h`（`DRV_UART_NET_*`），不在 app_cfg.h 里重复一份 |
 
@@ -131,12 +128,11 @@ Interface 层**不包含** `app_cfg.h`（那是 Application 的东西），所�
 | `app_fsm.c/h` | 状态机（WAITING / COUNTDOWN / ALARM + muted 规则） |
 | `app_protocol.c/h` | MQTT 主题与报文组装、下行指令解析 |
 | `app_heartbeat.c/h` | 心跳推进与期限检查 |
-| `app_tasks.c/h` | 6 个任务的创建与入口声明；优先级/栈深统一取自 `app_cfg.h` |
+| `app_tasks.c/h` | 5 个任务的创建与入口声明；优先级/栈深统一取自 `app_cfg.h` |
 | `task_control.c` | ControlTask：按键、状态机、倒计时、ACK 生成、秒计数、堆打印 |
 | `task_alarm.c` | AlarmTask |
 | `task_sensor.c` | SensorTask |
 | `task_net.c` | NetTask：驱动 Interface 层的 AT 状态机，管 `at_tx_queue` / `ack_queue`、组装时机与心跳（**AT 状态机本体不在这里**） |
-| `task_config.c` | ConfigTask |
 | `task_dog.c` | DogTask |
 
 > 任务、队列、事件组都定义在 Application 层——它们是业务通信手段，不是驱动。Driver 层允许用信号量做收发同步，但不含业务判断。
@@ -153,11 +149,9 @@ Interface 层**不包含** `app_cfg.h`（那是 Application 的东西），所�
 | MQTT 报文与指令解析 | `Application/Src/app_protocol.c` |
 | 心跳：各任务自己调 `app_hb_kick()`，DogTask 调 `app_hb_check_all()` 统一判定 | `Application/Src/app_heartbeat.c` + `task_dog.c` |
 | DHT11 时序 | `Driver/Src/drv_dht11.c` |
-| 24C02 页写拆包 | `Driver/Src/drv_24c02.c` |
 | 蜂鸣器 PWM + LED | `Driver/Src/drv_pwm.c` + `drv_gpio.c` |
 | 串口 DMA + IDLE + 环形缓冲 | `Driver/Src/drv_uart.c` + `Common/Src/cm_ringbuf.c` |
 | AT 命令状态机、URC 解析——**实现在 Interface 层**；Application 的 `task_net.c` 只负责驱动它、管队列和心跳 | `Interface/Src/if_net.c` |
-| 配置默认值、CRC8、`config_load()` | `Interface/Src/if_store.c` + `Common/Src/cm_crc.c` |
 
 ## 五、Keil 分组与头文件路径
 
@@ -199,7 +193,7 @@ Interface 层**不包含** `app_cfg.h`（那是 Application 的东西），所�
 - 目录与文件一律小写蛇形；项目目录 `Project-YYYYMMDD-主题`
 - 每个 `.c` 配同名 `.h`，头文件用 `#pragma once`；文件名前缀 = 它所属的层（见 7.2）
 - Driver 层的粒度：**总线/外设级按外设命名**（`drv_uart`、`drv_pwm`、`drv_gpio`），
-  **单一器件专用按型号命名**（`drv_dht11`、`drv_24c02`）。
+  **单一器件专用按型号命名**（`drv_dht11`）。
   不要写 `drv_i2c_ee` 这种"总线 + 器件缩写"混着来的名字——`ee` 不查不知道是 EEPROM，
   而且以后加第二个 I2C 器件时这个文件没地方安放
 
@@ -208,8 +202,8 @@ Interface 层**不包含** `app_cfg.h`（那是 Application 的东西），所�
 | 对象 | 前缀 | 例子 |
 |---|---|---|
 | Common 层 | `cm_` | `cm_json`、`cm_ringbuf`、`cm_log` |
-| Driver 层 | `drv_` | `drv_uart`、`drv_dht11`、`drv_24c02` |
-| Interface 层 | `if_` | `if_net`、`if_alarm`、`if_store` |
+| Driver 层 | `drv_` | `drv_uart`、`drv_dht11`、`drv_pwm` |
+| Interface 层 | `if_` | `if_net`、`if_alarm`、`if_input`、`if_log` |
 | Application 公共 | `app_` | `app_cfg`、`app_fsm`、`app_heartbeat` |
 | Application 任务 | `task_` | `task_control`、`task_net` |
 | 设备业务语义（状态 / 指令 / 回执码） | `MOXA_` | `MOXA_ST_ALARM`、`MOXA_CMD_SET_TH`、`MOXA_CODE_BAD_PARAM` |
@@ -231,7 +225,6 @@ Interface 层**不包含** `app_cfg.h`（那是 Application 的东西），所�
     |---|---|---|
     | `task_control.c` | `ctrl_` | `ctrl_ack_emit` |
     | `task_net.c` | `net_` | `net_pump_tx` |
-    | `task_config.c` | `config_` | `config_page_done` |
     | `app_ctx.c` | `ctx_` | `ctx_create_queues` |
     | `app_tasks.c` | `tasks_` | `tasks_create_one` |
     | `cm_json.c` | `json_` | `json_key_equals` |
@@ -290,4 +283,4 @@ Interface 层**不包含** `app_cfg.h`（那是 Application 的东西），所�
 1. CubeMX 新建工程：**位置选 `experiments\`、工程名填 `Project-20261001-moxibustion-f407`**，生成的文件会正好落在工程根（位置栏填的是上一级，CubeMX 会再拼一层工程名；详见"二、目录结构"里的说明）。已生成好的工程直接打开 `Project-20261001-moxibustion-f407.ioc` 改配置即可。
 2. 按 `docs/M1-CubeMX配置清单.md` 配外设与 FreeRTOS，生成 Keil 工程
 3. 先把 `Common/` 和 `Application/app_ctx.c` 写出来（不依赖硬件，可离线写完）
-4. 再按 M1 出口条件验证：6 个任务心跳、栈溢出钩子、堆占用打印
+4. 再按 M1 出口条件验证：5 个任务心跳、栈溢出钩子、堆占用打印

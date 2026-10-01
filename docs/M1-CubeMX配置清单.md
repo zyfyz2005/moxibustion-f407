@@ -13,13 +13,12 @@
 | DHT11 / DS18B20 数据脚 | **PG9**（第 124 脚）。J6 座：1=VCC3.3 / 2=DQ / 3=NC / 4=GND，板载 R36 10K 上拉 |
 | WiFi 模组 | **USART3**：PB10(USART3_TX)→**W_TX**（模组 URXD）、PB11(USART3_RX)←**W_RX**（模组 UTXD）；**CH_PD 使能脚 = PF6**（高电平工作）；模组状态灯 = PC0 |
 | 蜂鸣器 | **无源**，接 **PF8**，S8050（Q2）+ R37 1K 驱动，必须 PWM 驱动 → **TIM13 要启用**（PF8 的定时器复用只有 TIM13_CH1） |
-| 24C02 | **PB8 = I2C1_SCL / PB9 = I2C1_SDA**（I2C1，AF4），7 位地址 0x50 |
 
 > 接线提醒：J6 是 4 针座，而 DHT11 是三针模块（VCC/DATA/GND），直接插会错位，要用杜邦线按 1↔VCC、2↔DATA、4↔GND 接。
 
 仍待实测的一小项：WK_UP / KEY1 / KEY0 按下时的电平（原理图已给结论，上电复核一次即可）。
 LED0/LED1 **共阳**（低电平点亮）已由原理图确认，不必再翻转试验。
-另外板级引脚有两项建议实物通断复核：24C02 是否真接 PB8/PB9、PF8 是否真连到 R37（详见计划书第三节"待实物确认项"）。
+另外板级引脚还有一项建议实物通断复核：PF8 是否真连到 R37（详见计划书第三节"待实物确认项"）。
 
 ## 1. 新建工程
 
@@ -86,21 +85,6 @@ LED0/LED1 **共阳**（低电平点亮）已由原理图确认，不必再翻转
 | Word / Parity / Stop | 8 / None / 1 |
 
 无需 DMA，也不用中断（用阻塞式 `printf` 重定向即可）。若后续想让日志不占 CPU，再加 TX DMA。
-
-### I2C1 —— 24C02
-
-| 参数 | 值 |
-|---|---|
-| Mode | I2C |
-| 引脚 | **PB8 = I2C1_SCL，PB9 = I2C1_SDA** |
-| Speed Mode | Fast Mode，400 kHz |
-| 中断 | **不使能**（用阻塞式 `HAL_I2C_Mem_Read/Write`，超时 50 ms） |
-
-> 用轮询而非中断：ConfigTask 是低优先级任务，阻塞几毫秒无所谓，还能少一个要盯的中断优先级。
-> 注意 AT24C02 页写 8 字节边界，跨页必须拆包——这是驱动层要处理的，不是 CubeMX 的事。
-> **别选成 PB6/PB7**：芯片上 PB6/PB7 确实也带 I2C1 复用，但这块板子上它们接的是摄像头 DCMI_D5 / DCMI_VSYNC。
-> CubeMX 里如果 I2C1 给的是 PB6/PB7，说明选错了引脚。
-> 24C02 的 7 位地址是 **0x50**（A0/A1/A2 全接地），WP 悬空所以可写。
 
 ### TIM13 —— 蜂鸣器 PWM（PF8，已确认无源，必须配）
 
@@ -228,19 +212,17 @@ CubeMX 生成的 `HAL_Init()` 会把 SysTick 优先级设成 15（最低），`c
    ```c
    moxa_cfg_t cfg;
 
-   /* ① 读配置：调度器未启动，内部只用 HAL 轮询式 I2C，不许碰 FreeRTOS API */
-   if_store_load(&cfg, &cfg);
+  /* ① 配置：删掉 24C02 持久化后直接用 app_cfg.h 的默认值 */
+  static const moxa_cfg_t cfg = { APP_DEF_TH_C, APP_DEF_DUR_S };
+  app_ctx_init(&cfg);
 
-   /* ② 建队列/事件组/互斥量、初始化共享状态 */
-   app_ctx_init(&cfg);
+  /* ② 接日志写口 */
+  app_log_init();
 
-   /* ③ 接日志写口（实现依赖 drv_uart，第 4 步补） */
-   app_log_init();
+  /* ③ 建 5 个任务（优先级/栈深取自 app_cfg.h） */
+  app_tasks_create();
 
-   /* ④ 建 6 个任务（优先级/栈深取自 app_cfg.h） */
-   app_tasks_create();
-
-   /* ⑤ 开机打印复位原因：读 RCC->CSR 的 IWDGRSTF / PINRSTF 等标志 */
+  /* ④ 开机打印复位原因：读 RCC->CSR 的 IWDGRSTF / PINRSTF 等标志 */
 
    osKernelStart();
    ```
@@ -258,7 +240,7 @@ CubeMX 生成的 `HAL_Init()` 会把 SysTick 优先级设成 15（最低），`c
 全部满足才算 M1 完成：
 
 - [ ] 调试串口 115200 能打印，中文不乱码
-- [ ] 6 个任务各自按心跳表推进并打印（ControlTask 100ms / AlarmTask 500ms / SensorTask 2s / NetTask 200ms / ConfigTask 500ms）
+- [ ] 5 个任务都在跑：每 30s 的 `stack free(w)` 行里能看到 5 个任务（dog / control / alarm / sensor / net），且全程没有 `hb: TIMEOUT` 行
 - [ ] 故意把某任务栈设成 128 word，能触发 `vApplicationStackOverflowHook`（验证栈检查真的开了）
 - [ ] ControlTask 每 30s 打印一行 `xPortGetFreeHeapSize` 与 `xPortGetMinimumEverFreeHeapSize`
 - [ ] 连续运行 10 分钟，最小剩余堆 ≥ 8 KB
@@ -268,4 +250,3 @@ CubeMX 生成的 `HAL_Init()` 会把 SysTick 优先级设成 15（最低），`c
 
 - **不要启动 IWDG**（M5 才做）。调试期 IWDG 一旦启动无法关闭，会被反复复位。
 - **不要写 AT 命令**（M4 才做）。M1 只要能把 WiFi USART 的 DMA + IDLE 接收跑通、收到一堆字节不丢就够了。
-- **不要碰 24C02 的配置协议**，M1 只验证 I2C 能读到器件应答（ACK）即可。
