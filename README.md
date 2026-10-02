@@ -175,6 +175,8 @@ Interface 层**不包含** `app_cfg.h`（那是 Application 的东西），所�
 
 ## 六、CubeMX 重新生成后必做（每次都要过一遍）
 
+0. **先检查 Keil 的调试器与烧录算法**（2026-10-02 踩过）：CubeMX 重新生成会连 `.uvoptx` 一起重写，把调试器从你选的 **ST-Link** 换回默认的 **CMSIS-DAP**（`.uvoptx` 里 `<pMon>` 由 `STLink\ST-LINKIII-KEIL_SWO.dll` 变成 `BIN\CMSIS_AGDI.dll`）。插着 ST-Link 却让工程找 CMSIS-DAP，下载会失败——严重时擦除做了一半、程序没写进去，表现是**板子像死了一样、串口一个字都没有**。所以生成后第一件事：`Options for Target → Debug → Use:` 选回 **ST-Link Debugger**；`Utilities → Settings → Flash Download` 确认算法是 **STM32F4xx Flash**（0x08000000 / 1 MB）。下载时认准 Build Output 里的 `Erase Done / Programming Done / Verify OK` 三行。
+
 1. **检查 Keil 里我们自己的四个分组（Application / Interface / Driver / Common）还在不在**。CubeMX 会重写 `.uvprojx`，自己加的分组和文件有可能被丢掉，丢了就重新 Add Existing Files（源文件本身不会丢）。
 2. **逐项核对 `FreeRTOSConfig.h`**。它是 CubeMX 生成的会被覆盖——`configCHECK_FOR_STACK_OVERFLOW`、`configMAX_PRIORITIES`、`configTOTAL_HEAP_SIZE` 最容易被重置。
 3. **确认 `stm32f4xx_hal_timebase_tim.c` 还在**，这是 HAL 时基跑在 TIM6 的证据；文件没了说明时基又被改回 SysTick。在 CubeMX 里对应 `SYS → Timebase Source = TIM6`（详见 `docs/M1-CubeMX配置清单.md` 第 3 节）。

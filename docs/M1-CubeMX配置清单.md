@@ -205,6 +205,8 @@ CubeMX 生成的 `HAL_Init()` 会把 SysTick 优先级设成 15（最低），`c
 
 ## 8. 生成后必须手工做的五件事
 
+0. **先把 Keil 的调试器选回来**：CubeMX 重生成会把 `.uvoptx` 里的调试器重置成 CMSIS-DAP（`BIN\CMSIS_AGDI.dll`），而你板子上是 ST-Link。不改的话下载会失败，甚至擦了没写进去——表现为板子像死了、串口毫无输出。`Options for Target → Debug → Use:` 选 **ST-Link Debugger**，`Utilities → Settings → Flash Download` 确认算法是 **STM32F4xx Flash**（1 MB）。下载成功的标志是 Build Output 里 `Erase Done / Programming Done / Verify OK`。
+
 1. **确认 HAL 时基是 TIM6**：看 `main.c` 里 `HAL_InitTick` 的调用和 `stm32f4xx_hal_timebase_tim.c` 是否存在。缺文件说明 Timebase Source 没改。
 2. **核对 `FreeRTOSConfig.h`**：第 6 节的六项参数逐个对照，CubeMX 偶尔会把 `configCHECK_FOR_STACK_OVERFLOW` 重置成 0。
 3. **启动顺序写死在 `main()` 里，照抄下面这段**（顺序错了会在调度器起来之前挂死）：
@@ -245,6 +247,14 @@ CubeMX 生成的 `HAL_Init()` 会把 SysTick 优先级设成 15（最低），`c
 - [ ] ControlTask 每 30s 打印一行 `xPortGetFreeHeapSize` 与 `xPortGetMinimumEverFreeHeapSize`
 - [ ] 连续运行 10 分钟，最小剩余堆 ≥ 8 KB
 - [ ] 上电复位原因是 `PINRSTF`（不是看门狗复位）
+
+### 待硬件（2026-10-02 记）
+
+- [ ] **DHT11**：手上暂时没有传感器。插上后 `dht11: fail` 应归零、`diag` 行的 `temp=` 应出现真实读数（常温 25 ℃ 左右）。
+  在此之前与传感器相关的现象都是**预期、不是故障**：`fail=100%`、`max_consec` 一直涨、`temp=0`。
+  注意：这版驱动只实现 DHT11 的单总线时序，**不支持 DS18B20**（1-Wire，时序完全不同）。
+- [ ] **ESP8266 模组**：日志里 `net: RESET rx=0 B drop=0` 说明模组口一个字节都没收到，
+  需要确认模组是否插在 P3 座上、P10 跳帽是否在 WiFi 侧（竖插下排两孔）。M1 不要求它有数据，M4 才用得上。
 
 ## 附：本阶段不要做的事
 
