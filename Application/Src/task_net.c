@@ -315,10 +315,14 @@ void task_net(void *arg)
         /* 4. 在线状态变化就上报 */
         net_report_status();
 
-        /* 5. 每 3s 一条遥测 */
+        /* 5. 每 3s 一条遥测——但**只在已上线时排**。
+         *    离线时排进去也发不出去，队列（深度 8）填满后每塞一条就丢一条最旧的，
+         *    还顺带把 err_cnt 一路推高（每 30s 涨 10）——那是噪音，不是真错误。 */
         if (cm_timeout_expired(now, last_tele, APP_TELEMETRY_PERIOD_MS)) {
             last_tele = now;
-            net_push_telemetry();
+            if (if_net_online()) {
+                net_push_telemetry();
+            }
         }
 
         /* 6. 状态变化打一行日志，方便对着 M4 出口条件看流程走到哪一步 */
