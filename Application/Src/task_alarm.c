@@ -16,6 +16,8 @@
 
 #include "if_alarm.h"
 
+#include "tim.h"        /* htim13：TIM13_CH1 的 PWM 句柄（CubeMX 生成） */
+
 /* 输出参数从 app_cfg.h 取，一次性交给 Interface 层；
  * 这样"频率/节奏"这个参数的唯一来源仍然是 app_cfg.h，而 Interface 不必依赖 Application */
 static const if_alarm_cfg_t s_alarm_cfg = {
@@ -32,7 +34,7 @@ void task_alarm(void *arg)
 
     CM_UNUSED(arg);
 
-    (void)if_alarm_init(&s_alarm_cfg);
+    (void)if_alarm_init(&s_alarm_cfg, &htim13);
 
     for (;;) {
         uint32_t now;

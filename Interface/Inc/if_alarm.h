@@ -27,6 +27,8 @@
 
 #include "cm_types.h"
 
+#include "stm32f4xx_hal.h"
+
 /**
  * 报警输出的"档位"。
  * 这里刻意**不叫** WAITING/COUNTDOWN/ALARM——那是 ControlTask 的状态机词汇，
@@ -49,11 +51,16 @@ typedef struct {
 } if_alarm_cfg_t;
 
 /**
- * @brief 初始化：PWM 停振、两灯熄灭
- * @param cfg 输出参数（频率与节奏）
- * @return CM_OK；CM_ERR_PARAM 参数不合法（指针为空或频率/节奏为 0）
+ * @brief 初始化：把 PWM 句柄交给驱动、停振、两灯熄灭
+ * @param cfg  输出参数（频率与节奏）
+ * @param htim CubeMX 生成的 PWM 句柄（`htim13`，对应 PF8 / TIM13_CH1）
+ * @return CM_OK；CM_ERR_PARAM 入参为空、或句柄绑定失败
+ * @note **必须在任何 if_alarm_set / if_alarm_tick 之前调用**：本函数会把句柄转交给
+ *       `drv_pwm`。漏掉这一步的后果很隐蔽——编译链接都正常，只是蜂鸣器永远不响
+ *       （驱动内部句柄为 NULL，set_frequency / start 会直接返回）。
+ *       2026-10-02 上板时就踩了这个：现象是"除了不响都正常"。
  */
-cm_err_t if_alarm_init(const if_alarm_cfg_t *cfg);
+cm_err_t if_alarm_init(const if_alarm_cfg_t *cfg, TIM_HandleTypeDef *htim);
 
 /**
  * @brief 切换输出档位（不改变静音标志）

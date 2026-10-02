@@ -40,10 +40,17 @@ static void alarm_set_buzzer(bool on)
     }
 }
 
-cm_err_t if_alarm_init(const if_alarm_cfg_t *cfg)
+cm_err_t if_alarm_init(const if_alarm_cfg_t *cfg, TIM_HandleTypeDef *htim)
 {
-    if ((cfg == NULL) || (cfg->freq_temp_hz == 0u) || (cfg->freq_countdown_hz == 0u) ||
+    if ((cfg == NULL) || (htim == NULL) ||
+        (cfg->freq_temp_hz == 0u) || (cfg->freq_countdown_hz == 0u) ||
         (cfg->on_ms == 0u) || (cfg->off_ms == 0u) || (cfg->mute_blink_ms == 0u)) {
+        return CM_ERR_PARAM;
+    }
+
+    /* 先把 PWM 句柄交给驱动层。这一步漏了会导致蜂鸣器永远不响，而且编译、链接
+     * 全都正常——只有上板才看得出来，所以单独写在这里并配了这条注释 */
+    if (drv_pwm_init(htim) != CM_OK) {
         return CM_ERR_PARAM;
     }
 

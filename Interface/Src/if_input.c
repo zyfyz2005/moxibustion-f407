@@ -40,6 +40,11 @@ static const uint32_t s_key_mask[IF_INPUT_KEY_NUM] = {
 
 cm_err_t if_input_init(uint32_t debounce_ms)
 {
+    /* 板级 I/O 的初始电平在这里统一拉正：drv_gpio 是按键 / LED / 模组使能共用的驱动，
+     * 而 ControlTask 是优先级最高的业务任务、会最先跑到这一句。
+     * 不调用的话，CubeMX 的 MX_GPIO_Init 会把两颗 LED 初始化成低电平——共阳板上等于开机全亮。 */
+    (void)drv_gpio_init();
+
     s_debounce_ms = (debounce_ms == 0u) ? 1u : debounce_ms;
 
     for (uint8_t i = 0u; i < IF_INPUT_KEY_NUM; i++) {
