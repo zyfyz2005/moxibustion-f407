@@ -7,6 +7,20 @@
 - M1 配置清单：`docs/M1-CubeMX配置清单.md`
 - 原理图信息核对清单（引脚事实的唯一依据）：`docs/20261001-原理图信息核对清单.md`
 
+## 项目概览
+
+给艾灸治疗做的一台**控温 / 控时 / 报警**装置固件：一块 STM32F407ZGT6 同时承担采集、控制、报警与联网，跑 FreeRTOS。
+
+| 项 | 内容 |
+|---|---|
+| 硬件 | 普中-麒麟 STM32F407ZGT6 开发板；DHT11 温湿度（PG9）；无源蜂鸣器（PF8 / TIM13_CH1）；按键 PA0 / PE3 / PE4；LED PF9 / PF10；板载 ESP8266 模组（USART3，使能脚 PF6）；ST-Link 下载调试 |
+| 软件 | FreeRTOS + ST HAL；自建四层代码（Common / Driver / Interface / Application），5 个应用任务 |
+| 工具链 | Keil MDK5（ARMCC5 + MicroLIB）+ STM32F4xx_DFP；CubeMX 工程文件 `.ioc` 是配置的唯一入口 |
+| 编译烧录 | 打开 `MDK-ARM/Project-20261001-moxibustion-f407.uvprojx` → Rebuild → `Options for Target → Debug` 确认用 ST-Link → Download（认准 Erase Done / Programming Done / Verify OK 三行） |
+| 当前进度 | M1 骨架、M2 外设、M3 状态机 / 倒计时 / 报警 / 静音 / 复位均已上板验证；**M4 联网与 M5 看门狗未完成** |
+
+> `Application/Inc/app_cfg.h` 里的 WiFi 账号与 MQTT device_id / 主题都是占位值，实际部署前必须整组替换。
+
 ## 一、分层与依赖方向（这套架构的核心）
 
 ```text
@@ -40,7 +54,8 @@ Common        公共工具，任何层都能用，它自己只依赖标准库
 ```text
 Project-20261001-moxibustion-f407/
 ├─ README.md                     本文件
-├─ docs/                         过程记录（实测数据、接线照片、排查笔记）
+├─ docs/                         设计文档与过程记录（实测数据、排查笔记）
+│  ├─ 20261001-STM32F407艾灸装置项目计划书.md   v12 设计文档
 │  ├─ M1-CubeMX配置清单.md
 │  └─ 20261001-原理图信息核对清单.md
 ├─ Project-20261001-moxibustion-f407.ioc   CubeMX 工程文件，改配置的唯一入口
@@ -142,10 +157,10 @@ Interface 层**不包含** `app_cfg.h`（那是 Application 的东西），所�
 | 计划书里的东西 | 落到哪 |
 |---|---|
 | 全部可调参数 | `Application/Inc/app_cfg.h` |
-| 7 个应用层结构体（`MoxaState_t` / `CmdMsg_t` / `AckMsg_t` / `ConfigReq_t` / `ConfigResp_t` / `AtTxItem_t` / `SensorSample_t`），**按名字列，不写数字**——写数字必然随着新增字段/结构体过时 | `Application/Inc/app_types.h` |
+| 应用层结构体（`moxa_cfg_t` / `MoxaState_t` / `CmdMsg_t` / `AckMsg_t` / `AtTxItem_t` / `SensorSample_t`），**按名字列，不写数字**——写数字必然随着新增字段/结构体过时 | `Application/Inc/app_types.h` |
 | 队列 / 事件组 / 互斥量句柄 | `Application/Src/app_ctx.c` |
 | 状态机本体 | `Application/Src/app_fsm.c` |
-| 6 个 FreeRTOS 任务 | `Application/Src/task_*.c` |
+| 5 个 FreeRTOS 任务（`task_control` / `task_alarm` / `task_sensor` / `task_net` / `task_dog`） | `Application/Src/task_*.c` |
 | MQTT 报文与指令解析 | `Application/Src/app_protocol.c` |
 | 心跳：各任务自己调 `app_hb_kick()`，DogTask 调 `app_hb_check_all()` 统一判定 | `Application/Src/app_heartbeat.c` + `task_dog.c` |
 | DHT11 时序 | `Driver/Src/drv_dht11.c` |
@@ -181,7 +196,7 @@ Interface 层**不包含** `app_cfg.h`（那是 Application 的东西），所�
 2. **逐项核对 `FreeRTOSConfig.h`**。它是 CubeMX 生成的会被覆盖——`configCHECK_FOR_STACK_OVERFLOW`、`configMAX_PRIORITIES`、`configTOTAL_HEAP_SIZE` 最容易被重置。
 3. **确认 `stm32f4xx_hal_timebase_tim.c` 还在**，这是 HAL 时基跑在 TIM6 的证据；文件没了说明时基又被改回 SysTick。在 CubeMX 里对应 `SYS → Timebase Source = TIM6`（详见 `docs/M1-CubeMX配置清单.md` 第 3 节）。
 4. **`defaultTask` 按现状保留**（2026-10-01 决定）：CubeMX 默认生成 `StartDefaultTask`（用 `osThreadCreate` 建，优先级映射后是 3、栈 128 word、每 1 ms 醒一次空转）。M1 清单原先写的"Tasks 页面不建任何任务"**已作废**——保留它，但要知道代价：约 0.5 KB 堆 + 每秒上千次无谓唤醒。原理由见 M1 清单第 6 节。
-5. **`.ioc` 与 `FreeRTOSConfig.h` 必须纳入版本管理**，每次重新生成后先 `git diff` 看清改了什么再往下走——它们是"配置的唯一来源"和"被覆盖后最容易出问题"的两个文件。（当前状态：本工程整棵树尚未纳入 git。）
+5. **`.ioc` 与 `FreeRTOSConfig.h` 必须纳入版本管理**，每次重新生成后先 `git diff` 看清改了什么再往下走——它们是"配置的唯一来源"和"被覆盖后最容易出问题"的两个文件。
 6. **Keil 里勾 MicroLIB**（Options → Target → Use MicroLIB）。不勾时 `printf` 那套会带进约 6.7 KB Flash（其中浮点 3.5 KB）；本工程只打印整数，勾上直接省掉。
 
 ## 七、命名与注释规范
@@ -280,9 +295,24 @@ Interface 层**不包含** `app_cfg.h`（那是 Application 的东西），所�
   比如"最坏复位时间 = 2.5 s + 0.5 s + 4 s = 7.0 s"，不要只给结论数
 - **待办**用 `@todo`，并写清"什么条件下要做"，不写"以后优化"这种空话
 
-## 八、开工顺序
+## 八、从零重建本工程（作者本机流程，可选）
 
 1. CubeMX 新建工程：**位置选 `experiments\`、工程名填 `Project-20261001-moxibustion-f407`**，生成的文件会正好落在工程根（位置栏填的是上一级，CubeMX 会再拼一层工程名；详见"二、目录结构"里的说明）。已生成好的工程直接打开 `Project-20261001-moxibustion-f407.ioc` 改配置即可。
 2. 按 `docs/M1-CubeMX配置清单.md` 配外设与 FreeRTOS，生成 Keil 工程
 3. 先把 `Common/` 和 `Application/app_ctx.c` 写出来（不依赖硬件，可离线写完）
 4. 再按 M1 出口条件验证：5 个任务心跳、栈溢出钩子、堆占用打印
+
+## 第三方代码与许可
+
+本工程**自写部分**（`Common/`、`Driver/`、`Interface/`、`Application/`，以及 `Core/` 下的初始化配置与 Keil 工程文件）采用 **MIT** 许可，见根目录 `LICENSE`。
+
+仓库里还随工程分发了第三方代码——它们由 CubeMX 生成时一并落地，各自沿用原许可，许可文件都在原位：
+
+| 位置 | 来源 | 许可 |
+|---|---|---|
+| `Drivers/STM32F4xx_HAL_Driver/` | STMicroelectronics STM32F4 HAL Driver | BSD-3-Clause（`LICENSE.txt`） |
+| `Drivers/CMSIS/Device/ST/STM32F4xx/` | STMicroelectronics CMSIS 设备头文件 | BSD-3-Clause（`LICENSE.txt`） |
+| `Drivers/CMSIS/Include/` | ARM CMSIS Core | Apache-2.0（`LICENSE.txt`） |
+| `Middlewares/Third_Party/FreeRTOS/` | Amazon FreeRTOS 内核 | MIT（`Source/LICENSE`） |
+
+> 除 `Core/Inc/FreeRTOSConfig.h` 这类工程自身的配置外，上述第三方文件内容未被修改，随仓库分发只为满足编译依赖。
