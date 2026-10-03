@@ -122,6 +122,7 @@
  * 六、联网与 MQTT
  *
  * 换 broker 时必须整组改：地址、端口、device_id、上下行主题、client id、遗嘱载荷。
+ * device_id、上下行主题与 client id 当前是占位值，用前必须整组替换。
  * 只改一两个会出现"连上了但收不到/发不出去"这类最难查的问题。
  *
  * 上行主题里同时跑遥测、ACK 和在线状态；下行主题收指令。
@@ -131,10 +132,10 @@
 
 #define MQTT_BROKER                 "easyiothings.com"
 #define MQTT_PORT                   1883u
-#define DEVICE_ID                   100685u
-#define MQTT_TOPIC_UP               "Data/100685"
-#define MQTT_TOPIC_DOWN             "Sub/100685"
-#define MQTT_CLIENT_ID              "f407_moxa_100685"
+#define DEVICE_ID                   0u      /* 占位值：替换成自己的 device_id */
+#define MQTT_TOPIC_UP               "Data/replace_with_your_device_id"
+#define MQTT_TOPIC_DOWN             "Sub/replace_with_your_device_id"
+#define MQTT_CLIENT_ID              "replace_with_your_client_id"
 #define MQTT_LWT_PAYLOAD            "{\"type\":\"status\",\"online\":false}"
 
 /* WiFi 账号密码硬编码，换网络要重编译（计划书第五节的取舍） */
